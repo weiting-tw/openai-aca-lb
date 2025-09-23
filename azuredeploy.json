@@ -109,7 +109,7 @@
                     "containers": [
                         {
                             "name": "[parameters('containerAppName')]",
-                            "image": "andredewes/aoai-smart-loadbalancing:v1",
+                            "image": "andredewes/aoai-smart-loadbalancing:v2-auth",
                             "resources": {
                                 "cpu": 1,
                                 "memory": "2Gi"
