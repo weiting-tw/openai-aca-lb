@@ -103,7 +103,7 @@ This will use the Dockerfile which will build the source code inside the contain
 If you don't want to build the container from the source code, you can pull it from the public Docker registry:
 
 `
-docker pull andredewes/aoai-smart-loadbalancing:v1
+docker pull a26007565/aoai-smart-loadbalancing:v2-auth
 `
 
 ### Configuring the OpenAI endpoints and authentication

@@ -112,7 +112,7 @@ If you want to clone this repository and build your own image instead of using t
 
 ```
 cd src
-docker build -t aoai-smart-loadbalancing:v1 .
+docker build -t aoai-smart-loadbalancing:v2-auth .
 ```
 
 This will use the Dockerfile which will build the source code inside the container itself (no need to have .NET build tools in your host machine) and then it will copy the build output to a new runtime image for ASP.NET 8. Just make sure your Docker version supports [multi-stage](https://docs.docker.com/build/building/multi-stage/) builds. The final image will have around 87 MB.
@@ -122,7 +122,7 @@ This will use the Dockerfile which will build the source code inside the contain
 If you don't want to build the container from the source code, you can pull it from the public Docker registry:
 
 `
-docker pull andredewes/aoai-smart-loadbalancing:v1
+docker pull a26007565/aoai-smart-loadbalancing:v2-auth
 `
 
 ### Configuring the OpenAI endpoints
