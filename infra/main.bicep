@@ -107,6 +107,7 @@ module web 'web.bicep' = {
     backend_2_priority: 2
     backend_3_url: openAis[2].outputs.openAiEndpointUri
     backend_3_priority: 3
+    lb_api_key: toLower(uniqueString(subscription().id, name, location, 'lb-api-key'))
   }
 }
 

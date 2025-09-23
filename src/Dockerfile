@@ -22,4 +22,8 @@ RUN dotnet publish "./openai-loadbalancer.csproj" -c $BUILD_CONFIGURATION -o /ap
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+
+# Optional: Add sample environment variable for documentation
+# ENV LB_API_KEY=""
+
 ENTRYPOINT ["dotnet", "openai-loadbalancer.dll"]

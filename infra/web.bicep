@@ -27,8 +27,12 @@ param backend_2_priority int
 @description('The URL of your second Azure OpenAI endpoint in the following format: https://[name].openai.azure.com')
 param backend_3_url string
 
-@description('The priority of your second OpenAI endpoint (lower number means higher priority)')
+@description('The priority of your third OpenAI endpoint (lower number means higher priority)')
 param backend_3_priority int
+
+@minLength(8)
+@description('The API key to authenticate requests to the load balancer (minimum 8 characters)')
+param lb_api_key string
 
 
 // module containerAppsEnvironment 'core/host/container-apps-environment.bicep' = {
@@ -119,6 +123,10 @@ module app 'core/host/container-app.bicep' = {
       {
         name: 'BACKEND_3_PRIORITY'
         value: string(backend_3_priority)
+      }
+      {
+        name: 'LB_API_KEY'
+        value: lb_api_key
       }
     ]
   }

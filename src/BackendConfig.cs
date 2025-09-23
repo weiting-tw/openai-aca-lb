@@ -3,6 +3,7 @@
 public class BackendConfig
 {
     public static int HttpTimeoutSeconds = 100;
+    public static string? LoadBalancerApiKey = null;
 
     public required string Url { get; set; }
     public string? DeploymentName { get; set; }
@@ -35,10 +36,16 @@ public class BackendConfig
 
         //Load the general settings not in scope only for specific backends
         var httpTimeout = Environment.GetEnvironmentVariable("HTTP_TIMEOUT_SECONDS");
+        var lbApiKey = config["LB_API_KEY"] ?? Environment.GetEnvironmentVariable("LB_API_KEY");
 
         if (httpTimeout != null)
         {
             HttpTimeoutSeconds = Convert.ToInt32(httpTimeout);
+        }
+
+        if (!string.IsNullOrWhiteSpace(lbApiKey))
+        {
+            LoadBalancerApiKey = lbApiKey;
         }
 
         return returnDictionary;

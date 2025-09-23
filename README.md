@@ -106,9 +106,9 @@ If you don't want to build the container from the source code, you can pull it f
 docker pull andredewes/aoai-smart-loadbalancing:v1
 `
 
-### Configuring the OpenAI endpoints
+### Configuring the OpenAI endpoints and authentication
 
-After you deployed your container service using one of the methods above, it is time to adjust your OpenAI backends configuration using environment variables.
+After you deployed your container service using one of the methods above, it is time to adjust your OpenAI backends configuration and authentication settings using environment variables.
 This is the expected format you must provide:
 
 | Environment variable name | Mandatory | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Example                               |
@@ -140,6 +140,7 @@ This is the list of environment variables that are used to configure the load ba
 
 | Environment variable name | Mandatory | Description                                                                                                                                                                                                                                         | Example |
 |---------------------------|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| LB_API_KEY               | No        | API key required to authenticate requests to the load balancer. If not set, authentication is disabled and all requests are allowed. **Highly recommended for production deployments.** Clients must provide this key via `Authorization: Bearer <key>`, `X-API-Key: <key>`, or `api-key: <key>` headers. | my-secure-api-key-123 |
 | HTTP_TIMEOUT_SECONDS      | No        | If set, it will change the default 100 seconds timeout when waiting for OpenAI responses to something else.<br>If a timeout is reached, the endpoint it will be marked unhealthy for 10 seconds and the request will fallback to another backend. | 120     |
 
 ### Testing the solution
@@ -150,7 +151,7 @@ from openai import AzureOpenAI
 
 client = AzureOpenAI(
     azure_endpoint="https://<your_load_balancer_url>",  #if you deployed to Azure Container Apps, it will be 'https://app-[something].[region].azurecontainerapps.io'
-    api_key="does-not-matter", #The api-key sent by the client SDKs will be overriden by the ones configured in the backend environment variables
+    api_key="<your_lb_api_key>", #The API key for the load balancer (set in LB_API_KEY environment variable). The backend OpenAI keys are configured separately.
     api_version="2023-12-01-preview"
 )
 

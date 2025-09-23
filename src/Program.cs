@@ -21,6 +21,9 @@ public class Program
         builder.Services.AddHealthChecks();
         var app = builder.Build();
 
+        // Add API key authentication middleware before YARP
+        app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
+
         app.MapHealthChecks("/healthz");
         app.MapReverseProxy(m =>
         {

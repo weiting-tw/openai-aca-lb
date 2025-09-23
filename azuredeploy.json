@@ -64,6 +64,13 @@
             "metadata": {
                 "description": "The API key your second OpenAI endpoint"
             }
+        },
+        "lb_api_key": {
+            "type": "string",
+            "minLength": 8,
+            "metadata": {
+                "description": "The API key to authenticate requests to the load balancer (minimum 8 characters)"
+            }
         }
     },
     "resources": [
@@ -131,6 +138,10 @@
                                 {
                                     "name": "BACKEND_2_APIKEY",
                                     "value": "[parameters('backend_2_api_key')]"
+                                },
+                                {
+                                    "name": "LB_API_KEY",
+                                    "value": "[parameters('lb_api_key')]"
                                 }
                             ]
                         }
