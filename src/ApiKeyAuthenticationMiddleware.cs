@@ -1,3 +1,7 @@
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
+
 namespace openai_loadbalancer;
 
 public class ApiKeyAuthenticationMiddleware
@@ -5,6 +9,11 @@ public class ApiKeyAuthenticationMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<ApiKeyAuthenticationMiddleware> _logger;
     private readonly HashSet<string> _validApiKeys;
+
+    // IP-based rate limiting for failed authentication attempts
+    private static readonly ConcurrentDictionary<string, (int FailCount, DateTime? LockoutUntil)> _failedAttempts = new();
+    private const int MaxFailedAttempts = 5;
+    private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
 
     public ApiKeyAuthenticationMiddleware(RequestDelegate next, ILogger<ApiKeyAuthenticationMiddleware> logger, IConfiguration configuration)
     {
@@ -22,6 +31,17 @@ public class ApiKeyAuthenticationMiddleware
             return;
         }
 
+        // Get client IP address
+        var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        // Check if IP is locked out due to too many failed attempts
+        if (IsLockedOut(ipAddress))
+        {
+            _logger.LogWarning("Request blocked from locked out IP address {RemoteIpAddress}", ipAddress);
+            await WriteTooManyRequestsResponse(context, "Too many failed authentication attempts. Please try again later.");
+            return;
+        }
+
         // If no API key is configured, skip authentication
         if (_validApiKeys.Count == 0)
         {
@@ -35,20 +55,79 @@ public class ApiKeyAuthenticationMiddleware
 
         if (string.IsNullOrWhiteSpace(providedApiKey))
         {
-            _logger.LogWarning("Request received without API key from {RemoteIpAddress}", context.Connection.RemoteIpAddress);
+            _logger.LogWarning("Request received without API key from {RemoteIpAddress}", ipAddress);
+            RecordFailedAttempt(ipAddress);
             await WriteUnauthorizedResponse(context, "API key is required");
             return;
         }
 
-        if (!_validApiKeys.Contains(providedApiKey))
+        if (!ValidateApiKey(providedApiKey))
         {
-            _logger.LogWarning("Request received with invalid API key from {RemoteIpAddress}", context.Connection.RemoteIpAddress);
+            _logger.LogWarning("Request received with invalid API key from {RemoteIpAddress}", ipAddress);
+            RecordFailedAttempt(ipAddress);
             await WriteUnauthorizedResponse(context, "Invalid API key");
             return;
         }
 
-        _logger.LogDebug("Request authenticated successfully from {RemoteIpAddress}", context.Connection.RemoteIpAddress);
+        // Successful authentication - clear any previous failed attempts
+        ClearFailedAttempts(ipAddress);
+        _logger.LogDebug("Request authenticated successfully from {RemoteIpAddress}", ipAddress);
         await _next(context);
+    }
+
+    private bool IsLockedOut(string ipAddress)
+    {
+        if (_failedAttempts.TryGetValue(ipAddress, out var record))
+        {
+            if (record.LockoutUntil.HasValue && DateTime.UtcNow < record.LockoutUntil.Value)
+            {
+                return true;
+            }
+            // Lockout has expired, clear the record
+            if (record.LockoutUntil.HasValue && DateTime.UtcNow >= record.LockoutUntil.Value)
+            {
+                _failedAttempts.TryRemove(ipAddress, out _);
+            }
+        }
+        return false;
+    }
+
+    private void RecordFailedAttempt(string ipAddress)
+    {
+        _failedAttempts.AddOrUpdate(
+            ipAddress,
+            _ => (1, null),
+            (_, existing) =>
+            {
+                var newCount = existing.FailCount + 1;
+                if (newCount >= MaxFailedAttempts)
+                {
+                    _logger.LogWarning("IP address {RemoteIpAddress} locked out after {FailCount} failed authentication attempts",
+                        ipAddress, newCount);
+                    return (newCount, DateTime.UtcNow.Add(LockoutDuration));
+                }
+                return (newCount, existing.LockoutUntil);
+            });
+    }
+
+    private void ClearFailedAttempts(string ipAddress)
+    {
+        _failedAttempts.TryRemove(ipAddress, out _);
+    }
+
+    private bool ValidateApiKey(string providedKey)
+    {
+        var providedBytes = Encoding.UTF8.GetBytes(providedKey);
+        foreach (var validKey in _validApiKeys)
+        {
+            var validBytes = Encoding.UTF8.GetBytes(validKey);
+            if (providedBytes.Length == validBytes.Length &&
+                CryptographicOperations.FixedTimeEquals(providedBytes, validBytes))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static string? GetApiKeyFromRequest(HttpRequest request)
@@ -147,6 +226,24 @@ public class ApiKeyAuthenticationMiddleware
             error = new
             {
                 code = "Unauthorized",
+                message = message
+            }
+        };
+
+        await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(response));
+    }
+
+    private static async Task WriteTooManyRequestsResponse(HttpContext context, string message)
+    {
+        context.Response.StatusCode = 429;
+        context.Response.ContentType = "application/json";
+        context.Response.Headers["Retry-After"] = "900"; // 15 minutes in seconds
+
+        var response = new
+        {
+            error = new
+            {
+                code = "TooManyRequests",
                 message = message
             }
         };
