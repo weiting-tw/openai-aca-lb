@@ -4,13 +4,13 @@ public class ApiKeyAuthenticationMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ApiKeyAuthenticationMiddleware> _logger;
-    private readonly string? _requiredApiKey;
+    private readonly HashSet<string> _validApiKeys;
 
     public ApiKeyAuthenticationMiddleware(RequestDelegate next, ILogger<ApiKeyAuthenticationMiddleware> logger, IConfiguration configuration)
     {
         _next = next;
         _logger = logger;
-        _requiredApiKey = configuration["LB_API_KEY"] ?? Environment.GetEnvironmentVariable("LB_API_KEY");
+        _validApiKeys = LoadApiKeys(configuration);
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -23,7 +23,7 @@ public class ApiKeyAuthenticationMiddleware
         }
 
         // If no API key is configured, skip authentication
-        if (string.IsNullOrWhiteSpace(_requiredApiKey))
+        if (_validApiKeys.Count == 0)
         {
             _logger.LogWarning("No load balancer API key configured. Authentication is disabled. Set LB_API_KEY environment variable to enable authentication.");
             await _next(context);
@@ -40,7 +40,7 @@ public class ApiKeyAuthenticationMiddleware
             return;
         }
 
-        if (!string.Equals(providedApiKey, _requiredApiKey, StringComparison.Ordinal))
+        if (!_validApiKeys.Contains(providedApiKey))
         {
             _logger.LogWarning("Request received with invalid API key from {RemoteIpAddress}", context.Connection.RemoteIpAddress);
             await WriteUnauthorizedResponse(context, "Invalid API key");
@@ -53,6 +53,16 @@ public class ApiKeyAuthenticationMiddleware
 
     private static string? GetApiKeyFromRequest(HttpRequest request)
     {
+        // Check dedicated LB-API-Key header first to avoid conflicts with backend headers
+        if (request.Headers.TryGetValue("LB-API-Key", out var lbApiKeyHeader))
+        {
+            var headerValue = lbApiKeyHeader.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(headerValue))
+            {
+                return headerValue.Trim();
+            }
+        }
+
         // Check Authorization header (Bearer token)
         if (request.Headers.TryGetValue("Authorization", out var authHeader))
         {
@@ -66,16 +76,65 @@ public class ApiKeyAuthenticationMiddleware
         // Check X-API-Key header
         if (request.Headers.TryGetValue("X-API-Key", out var apiKeyHeader))
         {
-            return apiKeyHeader.FirstOrDefault();
+            var headerValue = apiKeyHeader.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(headerValue))
+            {
+                return headerValue.Trim();
+            }
         }
 
         // Check api-key header (common in Azure services)
         if (request.Headers.TryGetValue("api-key", out var azureApiKeyHeader))
         {
-            return azureApiKeyHeader.FirstOrDefault();
+            var headerValue = azureApiKeyHeader.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(headerValue))
+            {
+                return headerValue.Trim();
+            }
         }
 
         return null;
+    }
+
+    private static HashSet<string> LoadApiKeys(IConfiguration configuration)
+    {
+        var apiKeys = new HashSet<string>(StringComparer.Ordinal);
+
+        // Support hierarchical configuration such as LB_API_KEYS__0, LB_API_KEYS__1, etc.
+        var keysSection = configuration.GetSection("LB_API_KEYS");
+        if (keysSection.Exists())
+        {
+            foreach (var child in keysSection.GetChildren())
+            {
+                if (!string.IsNullOrWhiteSpace(child.Value))
+                {
+                    apiKeys.Add(child.Value.Trim());
+                }
+            }
+        }
+
+        // Support comma/semicolon separated list in LB_API_KEYS
+        var configuredKeys = configuration["LB_API_KEYS"] ?? Environment.GetEnvironmentVariable("LB_API_KEYS");
+        if (!string.IsNullOrWhiteSpace(configuredKeys))
+        {
+            var splitKeys = configuredKeys.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var key in splitKeys)
+            {
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    apiKeys.Add(key);
+                }
+            }
+        }
+
+        // Fallback to single LB_API_KEY
+        var singleKey = configuration["LB_API_KEY"] ?? Environment.GetEnvironmentVariable("LB_API_KEY");
+        if (!string.IsNullOrWhiteSpace(singleKey))
+        {
+            apiKeys.Add(singleKey.Trim());
+        }
+
+        return apiKeys;
     }
 
     private static async Task WriteUnauthorizedResponse(HttpContext context, string message)

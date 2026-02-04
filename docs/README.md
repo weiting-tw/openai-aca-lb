@@ -159,6 +159,8 @@ This is the list of environment variables that are used to configure the load ba
 
 | Environment variable name | Mandatory | Description                                                                                                                                                                                                                                         | Example |
 |---------------------------|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| LB_API_KEY               | No        | API key required to authenticate requests to the load balancer. If not set, authentication is disabled and all requests are allowed. **Highly recommended for production deployments.** Clients can provide this key via `LB-API-Key: <key>`, `Authorization: Bearer <key>`, `X-API-Key: <key>`, or `api-key: <key>` headers. | my-secure-api-key-123 |
+| LB_API_KEYS              | No        | Comma/semicolon separated list (or hierarchical config `LB_API_KEYS__0`, `LB_API_KEYS__1`, …) of API keys allowed to access the load balancer. Useful when you need to support multiple clients (e.g., Codex plus existing integrations). Evaluated in addition to `LB_API_KEY`. | key-one,key-two |
 | HTTP_TIMEOUT_SECONDS      | No        | If set, it will change the default 100 seconds timeout when waiting for OpenAI responses to something else.<br>If a timeout is reached, the endpoint it will be marked unhealthy for 10 seconds and the request will fallback to another backend. | 120     |
 
 ### Testing the solution
